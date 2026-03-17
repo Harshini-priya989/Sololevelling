@@ -1,0 +1,128 @@
+import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { CheckCircle2, Flame } from 'lucide-react'
+import HabitHeatmap from '../components/HabitHeatmap'
+import { useGame } from '../context/GameContext'
+import { setLastAction } from '../utils/actionLog'
+import { api } from '../utils/api'
+import { getCurrentSnapshot } from '../utils/storage'
+
+const buildHeatmapDays = (entries) => {
+  const days = []
+  for (let i = 34; i >= 0; i -= 1) {
+    const date = new Date()
+    date.setDate(date.getDate() - i)
+    const key = date.toISOString().slice(0, 10)
+    days.push({ date: key, count: entries[key] || 0 })
+  }
+  return days
+}
+
+function Habits() {
+  const { syncFromBackend, syncHabitStreak } = useGame()
+  const [habits, setHabits] = useState([])
+
+  const loadHabits = async () => {
+    const data = await api.get('/habits')
+    setHabits((data.habits || []).map((habit) => ({ ...habit, id: habit.habitId || habit.id })))
+  }
+
+  useEffect(() => {
+    loadHabits().catch(() => {})
+  }, [])
+
+  const combinedStreak = useMemo(() => (habits.length === 0 ? 0 : habits.reduce((total, habit) => total + (habit.streak || 0), 0)), [habits])
+
+  const globalHeatmap = useMemo(() => {
+    const entries = {}
+    habits.forEach((habit) => {
+      Object.entries(habit.history || {}).forEach(([date, count]) => {
+        entries[date] = (entries[date] || 0) + count
+      })
+    })
+    return buildHeatmapDays(entries)
+  }, [habits])
+
+  const completeHabit = async (habitId) => {
+    const snapshot = getCurrentSnapshot()
+    await api.patch(`/habits/${habitId}/complete`)
+    await syncFromBackend()
+    await loadHabits()
+    setLastAction({ type: 'restore_snapshot', snapshot })
+  }
+
+  const handleSyncStreak = async () => {
+    await syncHabitStreak()
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(56,189,248,0.25)]">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Habit Engine</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Daily Rituals</h2>
+            <p className="text-sm text-slate-300">Fixed non-negotiable habits. Complete each one daily.</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-200">
+            <Flame className="h-4 w-4 text-rose-300" />
+            {combinedStreak} Total Streak
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <HabitHeatmap days={globalHeatmap} />
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[2.2fr_1fr]">
+        <div className="grid gap-4 md:grid-cols-2">
+          {habits.map((habit) => (
+            <motion.div key={habit.id} whileHover={{ y: -4 }} className="rounded-2xl border border-white/10 bg-black/50 p-4 shadow-[0_0_18px_rgba(15,23,42,0.45)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{habit.title}</h3>
+                  <p className="text-xs text-slate-400">Reward {habit.xpReward} XP | Penalty {habit.xpPenalty || 0} XP</p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs text-emerald-100">{habit.streak} streak</span>
+                  <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-400/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-fuchsia-200">Fixed</span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+                <span>Last done: {habit.lastCompleted || 'Never'}</span>
+                <button type="button" onClick={() => completeHabit(habit.id)} className="flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-400/20">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Mark Done
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <h3 className="text-lg font-semibold text-white">Streak Sync</h3>
+            <p className="mt-2 text-sm text-slate-400">Sync combined habit streak into your global player streak.</p>
+            <button type="button" onClick={handleSyncStreak} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-fuchsia-400/40 bg-fuchsia-400/10 px-4 py-2 text-sm font-semibold text-fuchsia-100 transition hover:bg-fuchsia-400/20">
+              <Flame className="h-4 w-4" />
+              Sync Streak
+            </button>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <h3 className="text-lg font-semibold text-white">Rules</h3>
+            <ul className="mt-3 text-sm text-slate-400">
+              <li>Habits are fixed and cannot be added, edited, or deleted.</li>
+              <li>Marking done grants XP and updates streak/history.</li>
+              <li>Penalty value is shown per habit for rule-based use.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default Habits
