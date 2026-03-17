@@ -1,8 +1,9 @@
 import serverless from 'serverless-http'
-import app from '../../backend/src/app.js'
+import appModule from '../../backend/src/app.js'
 import { connectDB } from '../../backend/src/config/db.js'
 import { env } from '../../backend/src/config/env.js'
 
+const app = appModule?.default || appModule
 const serverlessHandler = serverless(app)
 
 export const handler = async (event, context) => {
