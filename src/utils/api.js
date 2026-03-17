@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api').replace(/\/$/, '')
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 const TOKEN_KEY = 'solo_leveling_auth_token_v1'
 const USER_KEY = 'solo_leveling_auth_user_v1'
 

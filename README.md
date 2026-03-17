@@ -10,7 +10,7 @@ A full MERN solo-leveling productivity app with real user accounts, MongoDB pers
 - XP, levels, ranks, streaks, gold, and rewards
 - Daily dashboard, weekly summary, and profile analytics
 - Backup export/import and undo through stored snapshots
-- Works locally and can be deployed for other users
+- Netlify-ready no-card deployment path
 
 ## Local Run
 
@@ -28,64 +28,62 @@ A full MERN solo-leveling productivity app with real user accounts, MongoDB pers
 4. Add a MongoDB Atlas or local MongoDB connection string
 5. Run `npm run dev`
 
-## Required Env
-
-### Frontend `.env`
+## Frontend Env
 
 ```env
-VITE_API_BASE_URL=http://localhost:5000/api
+VITE_API_BASE_URL=/api
 VITE_BASE_PATH=/
 ```
 
-### Backend `backend/.env`
+For local-only development you can also use:
+
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
+```
+
+## Backend Env
 
 ```env
 PORT=5000
 MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_secret
-CLIENT_URLS=http://localhost:5173
+CLIENT_URLS=http://localhost:5173,https://your-site.netlify.app
 NODE_ENV=development
 ```
 
-## Deployment
+## Netlify No-Card Deployment
 
-### Frontend
+This repo includes:
 
-You can deploy the frontend to Vercel or Netlify.
+- `netlify/functions/api.js`
+- `netlify.toml`
 
-Set these frontend env vars:
+### Deploy Steps
 
-```env
-VITE_API_BASE_URL=https://your-backend-domain/api
-VITE_BASE_PATH=/
-```
-
-A `vercel.json` file is included for SPA routing.
-
-### Backend
-
-You can deploy the backend to Render.
-
-A `render.yaml` file is included.
-
-Set these backend env vars in Render:
+1. Push the repo to GitHub
+2. Create a new Netlify site from the repo
+3. Netlify will use `netlify.toml` automatically
+4. In Netlify Site Configuration add env vars:
 
 ```env
 MONGODB_URI=your_atlas_uri
 JWT_SECRET=your_secret
-CLIENT_URLS=https://your-frontend-domain
+CLIENT_URLS=https://your-site.netlify.app,http://localhost:5173
 NODE_ENV=production
+VITE_API_BASE_URL=/api
+VITE_BASE_PATH=/
 ```
 
-If you use multiple frontend URLs, separate them with commas in `CLIENT_URLS`.
+5. Redeploy the site
+6. Open your Netlify URL and create accounts for each user
 
 ## Sharing With Others
 
-Once deployed:
+Once deployed on Netlify:
 
-- each user creates their own account
-- each user gets their own saved progress
-- all app data is stored in MongoDB Atlas
+- you and your friend can both sign up separately
+- each account gets separate saved data
+- MongoDB Atlas stores all user progress
 
 ## Tech Stack
 
@@ -93,3 +91,4 @@ Once deployed:
 - Express
 - MongoDB Atlas + Mongoose
 - JWT authentication
+- Netlify Functions

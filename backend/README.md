@@ -17,7 +17,7 @@ Separate MERN backend for the solo-leveling frontend.
 PORT=5000
 MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_secret
-CLIENT_URLS=http://localhost:5173
+CLIENT_URLS=http://localhost:5173,https://your-site.netlify.app
 NODE_ENV=development
 ```
 
@@ -49,11 +49,9 @@ NODE_ENV=development
 - `GET /api/awakening`
 - `PUT /api/awakening`
 
-## Deployment Notes
+## Netlify
 
-- MongoDB Atlas is recommended for production
-- Render is a good backend host for this server
-- Set `CLIENT_URLS` to your deployed frontend domain so CORS allows it
+The existing Express app is wrapped by `netlify/functions/api.js` for no-card deployment on Netlify Free.
 
 ## Auth
 
