@@ -3,95 +3,88 @@ import { GameProfile } from '../models/GameProfile.js'
 import { Habit } from '../models/Habit.js'
 import { Quest } from '../models/Quest.js'
 import { Reward } from '../models/Reward.js'
-import { createDefaultState, DEFAULT_REWARDS, FIXED_HABIT_TEMPLATES, FIXED_QUEST_TEMPLATES } from '../constants/gameDefaults.js'
+import { DEFAULT_REWARDS, FIXED_HABIT_TEMPLATES, FIXED_QUEST_TEMPLATES, createDefaultState } from '../constants/gameDefaults.js'
 import { toDateKey } from './gameMath.js'
 
 export const ensureGameDataForUser = async (userId) => {
   const defaultState = createDefaultState()
-
-  await GameProfile.findOneAndUpdate(
+  const profile = await GameProfile.findOneAndUpdate(
     { user: userId },
-    { $setOnInsert: { user: userId, ...defaultState } },
+    { $setOnInsert: { user: userId, ...defaultState, defaultsInstalled: false } },
     { upsert: true, new: true }
   )
 
-  const existingHabits = await Habit.find({ user: userId }).lean()
-  const habitsById = new Map(existingHabits.map((habit) => [habit.habitId, habit]))
-  const habitOps = FIXED_HABIT_TEMPLATES.map((template) => ({
-    updateOne: {
-      filter: { user: userId, habitId: template.id },
-      update: {
-        $set: {
+  if (!profile.defaultsInstalled) {
+    const [habitCount, questCount, rewardCount] = await Promise.all([
+      Habit.countDocuments({ user: userId }),
+      Quest.countDocuments({ user: userId }),
+      Reward.countDocuments({ user: userId }),
+    ])
+
+    if (habitCount || questCount || rewardCount) {
+      profile.defaultsInstalled = true
+      await profile.save()
+    } else {
+      const now = new Date().toISOString()
+      const today = toDateKey()
+
+      await Habit.insertMany(
+        FIXED_HABIT_TEMPLATES.map((template) => ({
+          user: userId,
+          habitId: template.id,
           title: template.title,
           xpReward: template.xpReward,
           xpPenalty: template.xpPenalty,
-          required: true,
-          locked: true,
-          category: 'Fixed',
-        },
-        $setOnInsert: {
-          user: userId,
-          habitId: template.id,
-          streak: habitsById.get(template.id)?.streak || 0,
-          history: habitsById.get(template.id)?.history || {},
-          lastCompleted: habitsById.get(template.id)?.lastCompleted || '',
-        },
-      },
-      upsert: true,
-    },
-  }))
-  if (habitOps.length) await Habit.bulkWrite(habitOps)
+          required: false,
+          locked: false,
+          category: 'Starter',
+          notes: '',
+          streak: 0,
+          history: {},
+          lastCompleted: '',
+          createdAt: now,
+          updatedAt: now,
+        }))
+      )
 
-  const today = toDateKey()
-  const existingQuests = await Quest.find({ user: userId }).lean()
-  const questsById = new Map(existingQuests.map((quest) => [quest.questId, quest]))
-  const questOps = FIXED_QUEST_TEMPLATES.map((template) => ({
-    updateOne: {
-      filter: { user: userId, questId: template.id },
-      update: {
-        $set: {
-          title: template.title,
-          difficulty: template.difficulty,
-          xp: template.xp,
-          gold: template.gold,
-        },
-        $setOnInsert: {
+      await Quest.insertMany(
+        FIXED_QUEST_TEMPLATES.map((template) => ({
           user: userId,
           questId: template.id,
-          deadline: questsById.get(template.id)?.deadline || today,
-          status: questsById.get(template.id)?.status || 'active',
-          completedAt: questsById.get(template.id)?.completedAt || null,
-          failedAt: questsById.get(template.id)?.failedAt || null,
-        },
-      },
-      upsert: true,
-    },
-  }))
-  if (questOps.length) await Quest.bulkWrite(questOps)
-
-  const existingRewards = await Reward.find({ user: userId }).lean()
-  const rewardsById = new Map(existingRewards.map((reward) => [reward.rewardId, reward]))
-  const rewardOps = DEFAULT_REWARDS.map((template) => ({
-    updateOne: {
-      filter: { user: userId, rewardId: template.id },
-      update: {
-        $set: {
           title: template.title,
-          description: template.description,
-          cost: template.cost,
-          cooldownDays: template.cooldownDays,
-        },
-        $setOnInsert: {
+          difficulty: template.difficulty,
+          category: 'Starter',
+          questType: 'daily',
+          notes: '',
+          xp: template.xp,
+          gold: template.gold,
+          deadline: today,
+          status: 'active',
+          completedAt: null,
+          failedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        }))
+      )
+
+      await Reward.insertMany(
+        DEFAULT_REWARDS.map((template) => ({
           user: userId,
           rewardId: template.id,
-          redeemCount: rewardsById.get(template.id)?.redeemCount || 0,
-          lastRedeemedAt: rewardsById.get(template.id)?.lastRedeemedAt || '',
-        },
-      },
-      upsert: true,
-    },
-  }))
-  if (rewardOps.length) await Reward.bulkWrite(rewardOps)
+          title: template.title,
+          description: template.description,
+          category: 'Starter',
+          cost: template.cost,
+          cooldownDays: template.cooldownDays,
+          redeemCount: 0,
+          lastRedeemedAt: '',
+        }))
+      )
+
+      profile.defaultsInstalled = true
+      await profile.save()
+    }
+  }
 
   await Awakening.findOneAndUpdate(
     { user: userId },

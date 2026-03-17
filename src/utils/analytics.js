@@ -1,4 +1,4 @@
-﻿const DAY_MS = 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const numberOrZero = (value) => {
   const next = Number(value)
@@ -220,6 +220,12 @@ export const getAccountAgeDays = (firstUseAt, endDate = new Date()) => {
   return Math.max(1, diff)
 }
 
+const resolveWindowDays = (days, startDate, endDate = new Date()) => {
+  const requested = Math.max(1, Math.floor(numberOrZero(days) || 1))
+  const age = getAccountAgeDays(startDate, endDate)
+  return Math.max(1, Math.min(requested, age))
+}
+
 export const getHabitDayStats = (habits = [], dateKey = toDateKey()) => {
   const total = habits.length
   const completed = habits.reduce((sum, habit) => {
@@ -236,8 +242,9 @@ export const getHabitDayStats = (habits = [], dateKey = toDateKey()) => {
   }
 }
 
-export const getHabitRangeStats = (habits = [], days = 7, endDate = new Date()) => {
-  const keys = getDateRangeKeys(days, endDate)
+export const getHabitRangeStats = (habits = [], days = 7, endDate = new Date(), startDate = endDate) => {
+  const windowDays = resolveWindowDays(days, startDate, endDate)
+  const keys = getDateRangeKeys(windowDays, endDate)
   const daily = keys.map((dateKey) => getHabitDayStats(habits, dateKey))
   const completed = daily.reduce((sum, item) => sum + item.completed, 0)
   const missed = daily.reduce((sum, item) => sum + item.missed, 0)
@@ -255,7 +262,7 @@ export const getHabitRangeStats = (habits = [], days = 7, endDate = new Date()) 
   }, 0)
 
   return {
-    days,
+    days: windowDays,
     completed,
     missed,
     completionPercent: toPercent(completed, completed + missed),
@@ -265,11 +272,12 @@ export const getHabitRangeStats = (habits = [], days = 7, endDate = new Date()) 
   }
 }
 
-export const getHabitMonthlyStats = (habits = [], endDate = new Date()) => {
-  const range = getHabitRangeStats(habits, 30, endDate)
+export const getHabitMonthlyStats = (habits = [], endDate = new Date(), startDate = endDate) => {
+  const range = getHabitRangeStats(habits, 30, endDate, startDate)
   const totalHabitDays = range.daily.filter((item) => item.completed > 0).length
   const missedDays = range.daily.filter((item) => item.completed === 0).length
   return {
+    windowDays: range.days,
     totalHabitDays,
     missedDays,
     consistencyPercent: range.completionPercent,
@@ -294,8 +302,9 @@ export const getQuestDayStats = (quests = [], dateKey = toDateKey()) => {
   }
 }
 
-export const getQuestRangeStats = (quests = [], days = 7, endDate = new Date()) => {
-  const keys = getDateRangeKeys(days, endDate)
+export const getQuestRangeStats = (quests = [], days = 7, endDate = new Date(), startDate = endDate) => {
+  const windowDays = resolveWindowDays(days, startDate, endDate)
+  const keys = getDateRangeKeys(windowDays, endDate)
   const daily = keys.map((dateKey) => getQuestDayStats(quests, dateKey))
   const completed = daily.reduce((sum, item) => sum + item.completed, 0)
   const failed = daily.reduce((sum, item) => sum + item.failed, 0)
@@ -309,7 +318,7 @@ export const getQuestRangeStats = (quests = [], days = 7, endDate = new Date()) 
   )
 
   return {
-    days,
+    days: windowDays,
     completed,
     failed,
     completionPercent: toPercent(completed, completed + failed),
@@ -697,10 +706,10 @@ export const buildProfileAnalytics = ({
   const accountAgeDays = getAccountAgeDays(firstUseAt, endDate)
   const todayKey = toDateKey(endDate)
   const habitToday = getHabitDayStats(habits, todayKey)
-  const habitWeek = getHabitRangeStats(habits, 7, endDate)
-  const habitMonth = getHabitMonthlyStats(habits, endDate)
+  const habitWeek = getHabitRangeStats(habits, 7, endDate, firstUseAt)
+  const habitMonth = getHabitMonthlyStats(habits, endDate, firstUseAt)
   const questToday = getQuestDayStats(quests, todayKey)
-  const questWeek = getQuestRangeStats(quests, 7, endDate)
+  const questWeek = getQuestRangeStats(quests, 7, endDate, firstUseAt)
   const history = buildDailyHistory({
     habits,
     quests,
@@ -710,7 +719,7 @@ export const buildProfileAnalytics = ({
     endDate,
   })
   const discipline = getDisciplineMetrics(history, endDate, firstUseAt)
-  const habitPatternStats = buildHabitPatternStats({ habits, days: 30, endDate })
+  const habitPatternStats = buildHabitPatternStats({ habits, days: Math.min(30, accountAgeDays), endDate })
   const behaviorInsight = buildBehaviorInsight({ habitPatternStats })
   const weeklyPerformance = buildWeeklyPerformance({
     historyRows: history,
@@ -738,8 +747,8 @@ export const buildProfileAnalytics = ({
     behaviorInsight,
     weeklyPerformance,
     trends: {
-      sevenDay: buildPerformanceSeries({ historyRows: history, days: 7, endDate }),
-      thirtyDay: buildPerformanceSeries({ historyRows: history, days: 30, endDate }),
+      sevenDay: buildPerformanceSeries({ historyRows: history, days: Math.min(7, accountAgeDays), endDate }),
+      thirtyDay: buildPerformanceSeries({ historyRows: history, days: Math.min(30, accountAgeDays), endDate }),
     },
   }
 }

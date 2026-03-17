@@ -8,6 +8,7 @@ const gameProfileSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
     schemaVersion: { type: Number, default: defaults.schemaVersion },
     historyVersion: { type: Number, default: defaults.historyVersion },
+    defaultsInstalled: { type: Boolean, default: false },
     xp: { type: Number, default: 0 },
     level: { type: Number, default: 1 },
     gold: { type: Number, default: 0 },

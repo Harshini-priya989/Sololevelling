@@ -37,17 +37,10 @@ export const clearSessionStorage = () => {
 export const apiRequest = async (path, options = {}) => {
   const headers = new Headers(options.headers || {})
   const token = getToken()
-
-  if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json')
-  }
+  if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  })
-
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
   const contentType = response.headers.get('content-type') || ''
   const data = contentType.includes('application/json') ? await response.json() : await response.text()
 
@@ -66,6 +59,7 @@ export const api = {
   post: (path, body) => apiRequest(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   put: (path, body) => apiRequest(path, { method: 'PUT', body: body ? JSON.stringify(body) : undefined }),
   patch: (path, body) => apiRequest(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: (path) => apiRequest(path, { method: 'DELETE' }),
 }
 
 export { API_BASE_URL, TOKEN_KEY, USER_KEY }

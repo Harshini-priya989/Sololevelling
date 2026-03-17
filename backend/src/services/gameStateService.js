@@ -164,9 +164,47 @@ export const exportSnapshot = async (userId) => {
       profile: state.profile,
       settings: state.settings,
     } : base,
-    quests: quests.map((quest) => ({ id: quest.questId, title: quest.title, difficulty: quest.difficulty, xp: quest.xp, gold: quest.gold, deadline: quest.deadline, status: quest.status, createdAt: quest.createdAt, updatedAt: quest.updatedAt, completedAt: quest.completedAt, failedAt: quest.failedAt })),
-    habits: habits.map((habit) => ({ id: habit.habitId, title: habit.title, xpReward: habit.xpReward, xpPenalty: habit.xpPenalty, required: habit.required, locked: habit.locked, category: habit.category, streak: habit.streak, history: habit.history, lastCompleted: habit.lastCompleted, createdAt: habit.createdAt, updatedAt: habit.updatedAt })),
-    rewards: rewards.map((reward) => ({ id: reward.rewardId, title: reward.title, description: reward.description, cost: reward.cost, cooldownDays: reward.cooldownDays, redeemCount: reward.redeemCount, lastRedeemedAt: reward.lastRedeemedAt })),
+    quests: quests.map((quest) => ({
+      id: quest.questId,
+      title: quest.title,
+      difficulty: quest.difficulty,
+      category: quest.category,
+      questType: quest.questType,
+      notes: quest.notes,
+      xp: quest.xp,
+      gold: quest.gold,
+      deadline: quest.deadline,
+      status: quest.status,
+      createdAt: quest.createdAt,
+      updatedAt: quest.updatedAt,
+      completedAt: quest.completedAt,
+      failedAt: quest.failedAt,
+    })),
+    habits: habits.map((habit) => ({
+      id: habit.habitId,
+      title: habit.title,
+      xpReward: habit.xpReward,
+      xpPenalty: habit.xpPenalty,
+      required: habit.required,
+      locked: habit.locked,
+      category: habit.category,
+      notes: habit.notes,
+      streak: habit.streak,
+      history: habit.history,
+      lastCompleted: habit.lastCompleted,
+      createdAt: habit.createdAt,
+      updatedAt: habit.updatedAt,
+    })),
+    rewards: rewards.map((reward) => ({
+      id: reward.rewardId,
+      title: reward.title,
+      description: reward.description,
+      category: reward.category,
+      cost: reward.cost,
+      cooldownDays: reward.cooldownDays,
+      redeemCount: reward.redeemCount,
+      lastRedeemedAt: reward.lastRedeemedAt,
+    })),
     rewardLog: rewardLog.map((entry) => ({ id: entry._id.toString(), title: entry.title, cost: entry.cost, at: entry.at, rewardId: entry.rewardId })),
     awakening: awakening ? { vision: awakening.vision, antiVision: awakening.antiVision } : { vision: '', antiVision: '' },
     focusId: state?.focusQuestId || '',
@@ -207,21 +245,62 @@ export const importSnapshot = async (userId, payload = {}) => {
   if (Array.isArray(payload.habits)) {
     await Habit.deleteMany({ user: userId })
     if (payload.habits.length) {
-      await Habit.insertMany(payload.habits.map((habit) => ({ user: userId, habitId: habit.id, title: habit.title, xpReward: habit.xpReward, xpPenalty: habit.xpPenalty, required: habit.required ?? true, locked: habit.locked ?? true, category: habit.category || 'Fixed', streak: habit.streak || 0, history: habit.history || {}, lastCompleted: habit.lastCompleted || '', createdAt: habit.createdAt, updatedAt: habit.updatedAt })))
+      await Habit.insertMany(payload.habits.map((habit) => ({
+        user: userId,
+        habitId: habit.id,
+        title: habit.title,
+        xpReward: habit.xpReward,
+        xpPenalty: habit.xpPenalty,
+        required: habit.required ?? false,
+        locked: habit.locked ?? false,
+        category: habit.category || 'General',
+        notes: habit.notes || '',
+        streak: habit.streak || 0,
+        history: habit.history || {},
+        lastCompleted: habit.lastCompleted || '',
+        createdAt: habit.createdAt,
+        updatedAt: habit.updatedAt,
+      })))
     }
   }
 
   if (Array.isArray(payload.quests)) {
     await Quest.deleteMany({ user: userId })
     if (payload.quests.length) {
-      await Quest.insertMany(payload.quests.map((quest) => ({ user: userId, questId: quest.id, title: quest.title, difficulty: quest.difficulty, xp: quest.xp, gold: quest.gold, deadline: quest.deadline || '', status: quest.status || 'active', completedAt: quest.completedAt ?? null, failedAt: quest.failedAt ?? null, createdAt: quest.createdAt, updatedAt: quest.updatedAt })))
+      await Quest.insertMany(payload.quests.map((quest) => ({
+        user: userId,
+        questId: quest.id,
+        title: quest.title,
+        difficulty: quest.difficulty,
+        category: quest.category || 'General',
+        questType: quest.questType || 'daily',
+        notes: quest.notes || '',
+        xp: quest.xp,
+        gold: quest.gold,
+        deadline: quest.deadline || '',
+        status: quest.status || 'active',
+        completedAt: quest.completedAt ?? null,
+        failedAt: quest.failedAt ?? null,
+        createdAt: quest.createdAt,
+        updatedAt: quest.updatedAt,
+      })))
     }
   }
 
   if (Array.isArray(payload.rewards)) {
     await Reward.deleteMany({ user: userId })
     if (payload.rewards.length) {
-      await Reward.insertMany(payload.rewards.map((reward) => ({ user: userId, rewardId: reward.id, title: reward.title, description: reward.description || '', cost: reward.cost || 0, cooldownDays: reward.cooldownDays || 1, redeemCount: reward.redeemCount || 0, lastRedeemedAt: reward.lastRedeemedAt || '' })))
+      await Reward.insertMany(payload.rewards.map((reward) => ({
+        user: userId,
+        rewardId: reward.id,
+        title: reward.title,
+        description: reward.description || '',
+        category: reward.category || 'Lifestyle',
+        cost: reward.cost || 0,
+        cooldownDays: reward.cooldownDays || 1,
+        redeemCount: reward.redeemCount || 0,
+        lastRedeemedAt: reward.lastRedeemedAt || '',
+      })))
     }
   }
 

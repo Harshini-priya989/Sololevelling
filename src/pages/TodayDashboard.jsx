@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Flame, Gem, ShieldCheck, Target } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Flame, Gem, ShieldCheck, Target } from 'lucide-react'
 import { useGame } from '../context/GameContext'
 
 const gradeStyle = {
@@ -18,6 +18,12 @@ const completionCopy = (percent) => {
   if (safe >= 60) return 'Momentum is building. Finish your pending tasks.'
   if (safe >= 40) return 'You are behind. Start with the easiest pending task now.'
   return 'Critical zone. Take immediate action to protect your streak.'
+}
+
+const openPath = (path) => {
+  if (typeof window === 'undefined') return
+  if (window.location.pathname === path) return
+  window.location.assign(path)
 }
 
 function TodayDashboard() {
@@ -141,8 +147,11 @@ function TodayDashboard() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-3xl border border-white/10 bg-black/35 p-5">
-          <h3 className="text-lg font-semibold text-white">Habits Today</h3>
+        <button type="button" onClick={() => openPath('/habits')} className="rounded-3xl border border-white/10 bg-black/35 p-5 text-left transition hover:border-cyan-400/40 hover:bg-black/45">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-white">Habits Today</h3>
+            <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-cyan-100">Open Habits <ArrowRight className="h-3.5 w-3.5" /></span>
+          </div>
           <div className="mt-3 space-y-2">
             {habits.map((task) => (
               <div
@@ -162,10 +171,13 @@ function TodayDashboard() {
               </div>
             ))}
           </div>
-        </div>
+        </button>
 
-        <div className="rounded-3xl border border-white/10 bg-black/35 p-5">
-          <h3 className="text-lg font-semibold text-white">Quests Today</h3>
+        <button type="button" onClick={() => openPath('/quests')} className="rounded-3xl border border-white/10 bg-black/35 p-5 text-left transition hover:border-fuchsia-400/40 hover:bg-black/45">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-white">Quests Today</h3>
+            <span className="inline-flex items-center gap-2 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-fuchsia-100">Open Quests <ArrowRight className="h-3.5 w-3.5" /></span>
+          </div>
           <div className="mt-3 space-y-2">
             {quests.map((task) => (
               <div
@@ -192,7 +204,7 @@ function TodayDashboard() {
               </div>
             ))}
           </div>
-        </div>
+        </button>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-black/35 p-4 text-sm text-slate-300">

@@ -1,11 +1,19 @@
-import { useMemo, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Gem, Gift, ShieldCheck } from 'lucide-react'
+import { Gem, Gift, Plus, ShieldCheck } from 'lucide-react'
 import RewardCard from '../components/RewardCard'
 import { useGame } from '../context/GameContext'
 import { setLastAction } from '../utils/actionLog'
 import { api } from '../utils/api'
 import { getCurrentSnapshot } from '../utils/storage'
+
+const emptyForm = {
+  title: '',
+  description: '',
+  category: 'Lifestyle',
+  cost: 100,
+  cooldownDays: 1,
+}
 
 const getCooldownInfo = (reward) => {
   if (!reward.lastRedeemedAt) return { onCooldown: false, label: '' }
@@ -21,6 +29,8 @@ function Rewards() {
   const { gold, syncFromBackend } = useGame()
   const [rewards, setRewards] = useState([])
   const [rewardLog, setRewardLog] = useState([])
+  const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState('')
 
   const loadRewards = async () => {
     const data = await api.get('/rewards')
@@ -32,9 +42,45 @@ function Rewards() {
     loadRewards().catch(() => {})
   }, [])
 
+  const resetForm = () => {
+    setForm(emptyForm)
+    setEditingId('')
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    const snapshot = getCurrentSnapshot()
+    if (editingId) await api.put(`/rewards/${editingId}`, form)
+    else await api.post('/rewards', form)
+    await syncFromBackend()
+    await loadRewards()
+    setLastAction({ type: 'restore_snapshot', snapshot })
+    resetForm()
+  }
+
   const handleRedeem = async (id) => {
     const snapshot = getCurrentSnapshot()
     await api.post(`/rewards/${id}/redeem`)
+    await syncFromBackend()
+    await loadRewards()
+    setLastAction({ type: 'restore_snapshot', snapshot })
+  }
+
+  const handleEdit = (reward) => {
+    setEditingId(reward.id)
+    setForm({
+      title: reward.title || '',
+      description: reward.description || '',
+      category: reward.category || 'Lifestyle',
+      cost: reward.cost || 100,
+      cooldownDays: reward.cooldownDays || 1,
+    })
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this reward?')) return
+    const snapshot = getCurrentSnapshot()
+    await api.delete(`/rewards/${id}`)
     await syncFromBackend()
     await loadRewards()
     setLastAction({ type: 'restore_snapshot', snapshot })
@@ -48,8 +94,8 @@ function Rewards() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Reward Vault</p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">Redeem Gold</h2>
-            <p className="text-sm text-slate-300">Spend hard-earned gold on rewards that recharge you.</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Custom Rewards</h2>
+            <p className="text-sm text-slate-300">Build your own reward store. Finish quests, earn gold, and spend that gold only on rewards you define here.</p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
             <Gem className="h-4 w-4" />
@@ -63,18 +109,35 @@ function Rewards() {
             Redemption Rules
           </div>
           <ul className="mt-3 text-sm text-slate-400">
+            <li>Quests give gold. Gold buys rewards.</li>
             <li>Gold never goes negative.</li>
-            <li>Claimed rewards are permanent.</li>
-            <li>Focus on rewards that restore energy.</li>
+            <li>Use rewards to recharge, not to derail momentum.</li>
           </ul>
         </div>
       </div>
+
+      <form onSubmit={handleSubmit} className="rounded-2xl border border-white/10 bg-black/35 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-white">{editingId ? 'Edit Reward' : 'Add Reward'}</h3>
+          {editingId ? <button type="button" onClick={resetForm} className="text-xs text-slate-400">Cancel edit</button> : null}
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <input value={form.title} onChange={(event) => setForm((prev) => ({ ...prev, title: event.target.value }))} placeholder="Reward title" className="rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white" required />
+          <input value={form.category} onChange={(event) => setForm((prev) => ({ ...prev, category: event.target.value }))} placeholder="Category" className="rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white" />
+          <input type="number" value={form.cost} onChange={(event) => setForm((prev) => ({ ...prev, cost: Number(event.target.value) }))} placeholder="Gold cost" className="rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white" />
+          <div className="flex gap-3">
+            <input type="number" value={form.cooldownDays} onChange={(event) => setForm((prev) => ({ ...prev, cooldownDays: Number(event.target.value) }))} placeholder="Cooldown days" className="w-full rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white" />
+            <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-2 text-sm font-semibold text-amber-100"><Plus className="h-4 w-4" />{editingId ? 'Update' : 'Create'}</button>
+          </div>
+        </div>
+        <textarea value={form.description} onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))} placeholder="Optional description" className="mt-3 h-24 w-full rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-sm text-white" />
+      </form>
 
       <div className="grid gap-6 lg:grid-cols-[2.2fr_1fr]">
         <div className="grid gap-4 md:grid-cols-2">
           {rewards.map((reward) => {
             const cooldown = getCooldownInfo(reward)
-            return <RewardCard key={reward.id} reward={reward} canRedeem={gold >= reward.cost} onRedeem={handleRedeem} onCooldown={cooldown.onCooldown} cooldownLabel={cooldown.label} />
+            return <RewardCard key={reward.id} reward={reward} canRedeem={gold >= reward.cost} onRedeem={handleRedeem} onCooldown={cooldown.onCooldown} cooldownLabel={cooldown.label} onEdit={handleEdit} onDelete={handleDelete} />
           })}
         </div>
 

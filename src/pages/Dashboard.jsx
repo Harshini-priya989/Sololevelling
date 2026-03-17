@@ -28,7 +28,7 @@ function InfoCard({ label, value, caption, icon: Icon, accent }) {
   )
 }
 
-function Dashboard() {
+function Dashboard({ onNavigate = () => {} }) {
   const { level, rank, gold, streak, syncFromBackend } = useGame()
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
   const [activityRange, setActivityRange] = useState('weekly')
@@ -80,39 +80,27 @@ function Dashboard() {
       bucket.habits += entry.habits
     })
 
-    const heatmapEntries = {}
-    weekly.concat(monthlyDays).forEach((entry) => {
-      heatmapEntries[entry.key] = (heatmapEntries[entry.key] || 0) + entry.quests + entry.habits
-    })
+    const heatmap = buildDays(35, (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })).map((entry) => ({ date: entry.key, count: entry.quests + entry.habits }))
 
-    const heatmap = []
-    for (let i = 34; i >= 0; i -= 1) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      const key = date.toISOString().slice(0, 10)
-      heatmap.push({ date: key, count: heatmapEntries[key] || 0 })
-    }
-
-    return { weekly, monthly: monthlyBuckets, heatmap }
+    setActivityData({ weekly, monthly: monthlyBuckets, heatmap })
   }
 
+  const activeData = useMemo(() => (activityRange === 'monthly' ? activityData.monthly : activityData.weekly), [activityData, activityRange])
+
   useEffect(() => {
-    const refresh = () => setActivityData(buildActivityData())
-    refresh()
-    const timer = setInterval(refresh, 2000)
-    return () => clearInterval(timer)
-  }, [])
-
-  const rangeData = activityRange === 'monthly' ? activityData.monthly : activityData.weekly
-  const rangeXp = useMemo(() => rangeData.reduce((total, entry) => total + entry.xp, 0), [rangeData])
-  const rangeWins = useMemo(() => rangeData.reduce((total, entry) => total + entry.quests + entry.habits, 0), [rangeData])
-
-  const focusId = readString('solo_leveling_focus_v1', '')
-  const focusQuest = focusId ? readStorage('solo_leveling_quests_v1', []).find((quest) => quest.id === focusId) : null
+    buildActivityData()
+    const lastAction = getLastAction()
+    if (lastAction?.type === 'restore_snapshot') {
+      hydrateSnapshotLocally(lastAction.snapshot)
+      clearLastAction()
+      syncFromBackend().catch(() => {})
+      buildActivityData()
+    }
+  }, [syncFromBackend])
 
   const handleExport = async () => {
-    const payload = await api.get('/game/backup/export')
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const data = await api.get('/game/export')
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -121,135 +109,97 @@ function Dashboard() {
     URL.revokeObjectURL(url)
   }
 
-  const handleImport = (event) => {
+  const handleImport = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const data = JSON.parse(reader.result)
-        const response = await api.post('/game/backup/import', data)
-        hydrateSnapshotLocally(response.snapshot)
-        await syncFromBackend()
-        window.location.reload()
-      } catch (error) {
-        // Ignore invalid import payloads.
-      }
-    }
-    reader.readAsText(file)
+    const text = await file.text()
+    await api.post('/game/import', JSON.parse(text))
+    await syncFromBackend()
+    buildActivityData()
     event.target.value = ''
   }
 
-  const handleResetSeason = async () => {
-    const proceed = window.confirm('Reset season? This will clear quests, habits, rewards, and XP.')
-    if (!proceed) return
-    await api.post('/game/hard-reset')
+  const handleHardReset = async () => {
+    if (!window.confirm('Hard reset your entire account progress? This cannot be undone.')) return
+    await api.post('/game/reset')
     await syncFromBackend()
-    window.location.reload()
-  }
-
-  const handleUndo = async () => {
-    const action = getLastAction()
-    if (!action?.snapshot) return
-    const response = await api.post('/game/backup/import', action.snapshot)
-    hydrateSnapshotLocally(response.snapshot)
-    clearLastAction()
-    await syncFromBackend()
-    window.location.reload()
+    buildActivityData()
   }
 
   return (
     <div className="space-y-6">
-      <PlayerStats />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <motion.section initial="initial" animate="animate" variants={cardVariants} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }} className="lg:col-span-2 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Hunter Briefing</p>
-              <h3 className="mt-2 text-xl font-semibold text-white">Gate Status</h3>
-              <p className="text-sm text-slate-300">Stay sharp. Clear one gate to maintain momentum.</p>
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-2 text-xs text-slate-200"><CalendarDays className="h-4 w-4 text-cyan-300" />{todayLabel}</div>
-          </div>
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400"><span>Directive</span><ShieldCheck className="h-4 w-4 text-emerald-300" /></div>
-              <p className="mt-3 text-sm text-slate-300">Complete your highest XP quest and lock in a habit streak. Every win compounds your rank.</p>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400"><span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Discipline</span><span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Focus</span><span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Momentum</span></div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-black/50 p-4">
-              <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400"><span>System Note</span><Crown className="h-4 w-4 text-fuchsia-300" /></div>
-              <p className="mt-3 text-sm text-slate-300">Rank advancement is locked to consistent XP gains. Avoid failed quests to preserve your level buffer.</p>
-              <div className="mt-4 text-xs text-slate-400">Current standing: <span className="text-slate-200">Level {level}</span> - <span className="text-slate-200">Rank {rank}</span></div>
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section initial="initial" animate="animate" variants={cardVariants} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1], delay: 0.05 }} className="space-y-4">
-          <InfoCard label="Rank" value={`Rank ${rank}`} caption={`Level ${level}`} icon={Crown} accent="rgba(147,51,234,0.55)" />
-          <InfoCard label="Gold Reserve" value={`${gold} G`} caption="Spend wisely in the Rewards vault." icon={Gem} accent="rgba(251,191,36,0.5)" />
-          <InfoCard label="Streak" value={`${streak} days`} caption="Missed days reset the chain." icon={Flame} accent="rgba(248,113,113,0.5)" />
-        </motion.section>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(147,51,234,0.25)]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="text-xs uppercase tracking-[0.35em] text-slate-400">Today Focus</p><h3 className="mt-2 text-xl font-semibold text-white">Primary Gate</h3></div>
-            <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-400/10 px-3 py-1 text-xs text-fuchsia-100">+10% XP bonus</span>
-          </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-slate-300">
-            {focusQuest ? <div className="space-y-2"><p className="text-lg font-semibold text-white">{focusQuest.title}</p><p className="text-xs uppercase tracking-[0.3em] text-slate-400">{focusQuest.difficulty} - {focusQuest.xp} XP - {focusQuest.gold} G</p><p className="text-xs text-slate-400">Deadline: {focusQuest.deadline || 'No deadline'}</p></div> : <p>No focus quest selected. Set one in Quests to lock your bonus.</p>}
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(56,189,248,0.25)]">
-          <div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-[0.35em] text-slate-400">Heatmap</p><h3 className="mt-2 text-xl font-semibold text-white">Activity Trace</h3></div></div>
-          <div className="mt-4"><HabitHeatmap days={activityData.heatmap} /></div>
-        </section>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(59,130,246,0.25)]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="text-xs uppercase tracking-[0.35em] text-slate-400">Performance</p><h3 className="mt-2 text-xl font-semibold text-white">{activityRange === 'monthly' ? 'Monthly' : 'Weekly'} XP Activity</h3></div>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setActivityRange('weekly')} className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.3em] transition ${activityRange === 'weekly' ? 'border-cyan-400/50 bg-cyan-400/10 text-cyan-100' : 'border-white/10 bg-white/5 text-slate-400'}`}>Weekly</button>
-                <button type="button" onClick={() => setActivityRange('monthly')} className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.3em] transition ${activityRange === 'monthly' ? 'border-fuchsia-400/50 bg-fuchsia-400/10 text-fuchsia-100' : 'border-white/10 bg-white/5 text-slate-400'}`}>Monthly</button>
-              </div>
-              <span className="rounded-full border border-fuchsia-400/40 bg-fuchsia-400/10 px-3 py-1 text-fuchsia-100">{rangeXp} XP</span>
-              <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-3 py-1 text-cyan-100">{rangeWins} Wins</span>
-            </div>
-          </div>
-
-          <div className="mt-6 h-64"><ResponsiveContainer width="100%" height="100%"><AreaChart data={rangeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}><defs><linearGradient id="xpGlow" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#a855f7" stopOpacity={0.7} /><stop offset="100%" stopColor="#0f172a" stopOpacity={0.1} /></linearGradient></defs><CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} /><XAxis dataKey="day" stroke="#94a3b8" tickLine={false} axisLine={false} /><YAxis stroke="#94a3b8" tickLine={false} axisLine={false} /><Tooltip contentStyle={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '12px', color: '#e2e8f0' }} cursor={{ stroke: '#a855f7', strokeWidth: 1 }} /><Area type="monotone" dataKey="xp" stroke="#a855f7" strokeWidth={2} fill="url(#xpGlow)" /></AreaChart></ResponsiveContainer></div>
-        </section>
-
-        <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(56,189,248,0.2)]">
-          <div><p className="text-xs uppercase tracking-[0.35em] text-slate-400">Completions</p><h3 className="mt-2 text-xl font-semibold text-white">Quest + Habit Wins</h3></div>
-          <div className="mt-6 h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={rangeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}><CartesianGrid stroke="rgba(148,163,184,0.12)" vertical={false} /><XAxis dataKey="day" stroke="#94a3b8" tickLine={false} axisLine={false} /><YAxis stroke="#94a3b8" tickLine={false} axisLine={false} /><Tooltip contentStyle={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '12px', color: '#e2e8f0' }} /><Bar dataKey="quests" stackId="wins" fill="#38bdf8" radius={[6, 6, 0, 0]} /><Bar dataKey="habits" stackId="wins" fill="#a855f7" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
-        </section>
-      </div>
-
-      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(79,70,229,0.2)]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-xs uppercase tracking-[0.35em] text-slate-400">System Tools</p><h3 className="mt-2 text-xl font-semibold text-white">Backup & Control</h3><p className="text-sm text-slate-300">Export, import, undo your last action, or reset the season.</p></div>
-          <button type="button" onClick={handleUndo} className="rounded-full border border-fuchsia-400/40 bg-fuchsia-400/10 px-4 py-2 text-xs font-semibold text-fuchsia-100 transition hover:bg-fuchsia-400/20">Undo Last Action</button>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button type="button" onClick={handleExport} className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/20">Export Profile</button>
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-300 transition hover:border-white/30">Import Profile</button>
-          <button type="button" onClick={handleResetSeason} className="rounded-full border border-rose-400/40 bg-rose-400/10 px-4 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20">Reset Season</button>
-          <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImport} className="hidden" />
-        </div>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <InfoCard label="Today" value={todayLabel} caption="Current battlefield" icon={CalendarDays} accent="rgba(34,211,238,0.25)" />
+        <InfoCard label="Level" value={level} caption={`Rank ${rank}`} icon={Crown} accent="rgba(168,85,247,0.25)" />
+        <InfoCard label="Gold" value={gold} caption="Spend in reward vault" icon={Gem} accent="rgba(251,191,36,0.28)" />
+        <InfoCard label="Streak" value={streak} caption="Momentum sync" icon={Flame} accent="rgba(248,113,113,0.28)" />
       </section>
 
-      <UserGuide />
+      <PlayerStats onExport={handleExport} onImportClick={() => fileInputRef.current?.click()} onReset={handleHardReset} />
+      <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
+
+      <section className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+        <motion.div variants={cardVariants} initial="initial" animate="animate" className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(124,58,237,0.25)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Activity Grid</p>
+              <h3 className="mt-2 text-2xl font-semibold text-white">XP Flow</h3>
+              <p className="text-sm text-slate-300">Track how your quests and habits stack XP across time.</p>
+            </div>
+            <div className="inline-flex rounded-full border border-white/10 bg-black/40 p-1 text-xs">
+              {['weekly', 'monthly'].map((range) => (
+                <button key={range} type="button" onClick={() => setActivityRange(range)} className={`rounded-full px-3 py-1 uppercase tracking-[0.3em] transition ${activityRange === range ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  {range}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={activeData}>
+                <defs>
+                  <linearGradient id="xpGlow" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a855f7" stopOpacity={0.65} />
+                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis dataKey="day" stroke="rgba(148,163,184,0.65)" axisLine={false} tickLine={false} />
+                <YAxis stroke="rgba(148,163,184,0.65)" axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: '#050816', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16 }} labelStyle={{ color: '#e2e8f0' }} />
+                <Area type="monotone" dataKey="xp" stroke="#a855f7" fill="url(#xpGlow)" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+
+        <motion.div variants={cardVariants} initial="initial" animate="animate" transition={{ delay: 0.05 }} className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/80 via-black/80 to-slate-950/80 p-6 shadow-[0_0_30px_rgba(34,197,94,0.16)]">
+          <div>
+            <p className="text-xs uppercase tracking-[0.35em] text-slate-400">Consistency Matrix</p>
+            <h3 className="mt-2 text-2xl font-semibold text-white">Streak Heatmap</h3>
+            <p className="text-sm text-slate-300">Every quest and habit completion leaves a signal on the grid.</p>
+          </div>
+          <div className="mt-6">
+            <HabitHeatmap days={activityData.heatmap} />
+          </div>
+          <div className="mt-6 h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={activeData}>
+                <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+                <XAxis dataKey="day" stroke="rgba(148,163,184,0.65)" axisLine={false} tickLine={false} />
+                <YAxis stroke="rgba(148,163,184,0.65)" axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: '#050816', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16 }} labelStyle={{ color: '#e2e8f0' }} />
+                <Bar dataKey="quests" fill="#22d3ee" radius={[12, 12, 0, 0]} />
+                <Bar dataKey="habits" fill="#f472b6" radius={[12, 12, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-300"><ShieldCheck className="h-4 w-4 text-emerald-300" />Undo and backups live above in Player Stats.</div>
+        </motion.div>
+      </section>
+
+      <UserGuide onNavigate={onNavigate} />
     </div>
   )
 }

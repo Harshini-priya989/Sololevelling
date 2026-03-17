@@ -68,6 +68,7 @@ function AnalyticsCards({ habits, quests }) {
     totalHabitDays: 0,
     missedDays: 0,
     consistencyPercent: 0,
+    windowDays: 1,
   }
 
   const questToday = quests?.today || { completed: 0, failed: 0, completionPercent: 0 }
@@ -77,6 +78,8 @@ function AnalyticsCards({ habits, quests }) {
     completionPercent: 0,
     byDifficulty: { Easy: 0, Normal: 0, Hard: 0 },
   }
+
+  const windowLabel = `${habitMonth.windowDays || 1}D`
 
   return (
     <section className="grid gap-6 lg:grid-cols-2">
@@ -121,7 +124,7 @@ function AnalyticsCards({ habits, quests }) {
             color="green"
           />
           <ProgressRow
-            label="Monthly Consistency"
+            label="Current Consistency Window"
             value={habitMonth.consistencyPercent}
             color="cyan"
           />
@@ -151,12 +154,12 @@ function AnalyticsCards({ habits, quests }) {
             icon={TrendingUp}
           />
           <StatMini
-            label="Habit Days (30D)"
+            label={`Habit Days (${windowLabel})`}
             value={formatCount(habitMonth.totalHabitDays)}
             icon={Target}
           />
           <StatMini
-            label="Missed Days (30D)"
+            label={`Missed Days (${windowLabel})`}
             value={formatCount(habitMonth.missedDays)}
             tone="bad"
             icon={XCircle}
@@ -229,4 +232,3 @@ function AnalyticsCards({ habits, quests }) {
 }
 
 export default AnalyticsCards
-

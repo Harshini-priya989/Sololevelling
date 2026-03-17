@@ -4,8 +4,9 @@ const rewardSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     rewardId: { type: String, required: true },
-    title: { type: String, required: true },
+    title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
+    category: { type: String, default: 'General' },
     cost: { type: Number, default: 0 },
     cooldownDays: { type: Number, default: 1 },
     redeemCount: { type: Number, default: 0 },
