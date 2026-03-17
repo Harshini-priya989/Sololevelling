@@ -3,15 +3,24 @@ import express from 'express'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import { env } from './config/env.js'
-import authRoutes from './routes/authRoutes.js'
-import awakeningRoutes from './routes/awakeningRoutes.js'
-import gameRoutes from './routes/gameRoutes.js'
-import habitRoutes from './routes/habitRoutes.js'
-import questRoutes from './routes/questRoutes.js'
-import rewardRoutes from './routes/rewardRoutes.js'
+import authRoutesModule from './routes/authRoutes.js'
+import awakeningRoutesModule from './routes/awakeningRoutes.js'
+import gameRoutesModule from './routes/gameRoutes.js'
+import habitRoutesModule from './routes/habitRoutes.js'
+import questRoutesModule from './routes/questRoutes.js'
+import rewardRoutesModule from './routes/rewardRoutes.js'
 import { requireAuth } from './middleware/auth.js'
 import { errorHandler, notFound } from './middleware/errorHandler.js'
 import { ensureGameDataForUser } from './services/bootstrapService.js'
+
+const resolveRouter = (moduleValue) => moduleValue?.default || moduleValue
+
+const authRoutes = resolveRouter(authRoutesModule)
+const awakeningRoutes = resolveRouter(awakeningRoutesModule)
+const gameRoutes = resolveRouter(gameRoutesModule)
+const habitRoutes = resolveRouter(habitRoutesModule)
+const questRoutes = resolveRouter(questRoutesModule)
+const rewardRoutes = resolveRouter(rewardRoutesModule)
 
 const app = express()
 
